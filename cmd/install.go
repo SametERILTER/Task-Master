@@ -56,6 +56,16 @@ This allows running 'tm' directly from any newly opened CMD or PowerShell window
 			return fmt.Errorf("failed to copy executable: %w", err)
 		}
 
+		// Also copy to GOPATH/bin if available (already in system PATH across all active shells)
+		homeDir, _ := os.UserHomeDir()
+		if homeDir != "" {
+			goBin := filepath.Join(homeDir, "go", "bin")
+			if fi, err := os.Stat(goBin); err == nil && fi.IsDir() {
+				goExe := filepath.Join(goBin, "tm.exe")
+				_ = copyFile(exePath, goExe)
+			}
+		}
+
 		// Register to User Environment PATH
 		key, err := registry.OpenKey(registry.CURRENT_USER, `Environment`, registry.ALL_ACCESS)
 		if err != nil {
@@ -105,4 +115,21 @@ This allows running 'tm' directly from any newly opened CMD or PowerShell window
 
 func init() {
 	rootCmd.AddCommand(installCmd)
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }

@@ -220,6 +220,12 @@ Contributions, bug reports, and feature requests are welcome.
 
 ---
 
+## Contact
+
+- Email: sametbilal34@gmail.com
+
+---
+
 ## License
 
 This project is licensed under the MIT License. See the LICENSE file for details.
