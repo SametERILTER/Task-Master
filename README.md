@@ -151,60 +151,50 @@ To launch TaskMaster from any directory or terminal session by typing `tm`:
 
 ---
 
-## CLI Subcommands and Parameters
+## Command-Line Flags and Parameters
 
-TaskMaster functions both as an interactive TUI dashboard and as a scriptable command-line utility.
+TaskMaster provides command-line flags to customize TUI startup behavior or execute quick non-interactive operations directly from your shell.
 
-### Running with Startup Flags
+### Flags Reference
+
+| Flag | Short | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--list <count>` | `-l` | None | Print snapshot table of top N processes to stdout and exit immediately (e.g. `tm --list 10`). |
+| `--sort <field>` | `-s` | `cpu` | Set process sorting metric: `cpu`, `mem` (or `memory`), `pid`, or `name`. |
+| `--filter <query>` | `-f` | None | Filter processes by name or PID substring upon launch (e.g. `tm --filter chrome`). |
+| `--theme <name>` | `-t` | `default` | Set active visual color theme (`default`, `nord`, `dracula`, `matrix`, `cyberpunk`). |
+| `--help` | `-h` | None | Display help information and available options for `tm`. |
+
+### Subcommands Reference
+
+| Subcommand | Arguments | Description |
+| :--- | :--- | :--- |
+| `tm list` | `[count]` / `-n <N>` | Print active processes snapshot to terminal and exit. Accepts positional count (e.g. `tm list 15`) or flag `-n, --top <N>`. |
+| `tm kill` | `<PID>` | Terminate a process directly by its Process ID without launching the UI. |
+| `tm install` | None | Copy binary to local user programs and register in Windows User PATH. |
+
+### Command-Line Usage Examples
 
 ```powershell
-# Launch directly sorted by Memory usage with Nord theme
+# Launch interactive TUI sorted by Memory usage with Nord theme
 tm --sort mem --theme nord
 
-# Launch with pre-applied filter for Chrome processes
-tm --filter chrome
-```
+# Launch interactive TUI filtered for Discord processes
+tm --filter discord
 
-### Fast Process Snapshot (`tm list`)
+# Print top 10 processes to terminal and exit immediately
+tm --list 10
 
-Dump active processes directly to stdout and exit without launching the full TUI:
+# Print top 5 processes sorted by Memory footprint
+tm -l 5 -s mem
 
-```powershell
-# List top 20 processes sorted by CPU
-tm list
+# Equivalent list subcommand usage
+tm list 10
+tm list -n 10 --sort mem
 
-# List top 10 processes sorted by Memory
-tm list --sort mem -n 10
-```
-
-Output format:
-```text
-PID      PROCESS NAME                        CPU %       RAM (MB)
-----------------------------------------------------------------
-18732    go.exe                              45.3%         26.9 MB
-13284    powershell.exe                      20.0%         64.2 MB
-7844     main.exe                            19.5%         10.2 MB
-```
-
-### Direct Process Termination (`tm kill`)
-
-Terminate a process directly from your shell without opening the UI:
-
-```powershell
+# Terminate a process by PID directly from terminal
 tm kill 4920
 ```
-
----
-
-## Available Themes
-
-| Theme Name | Style Characteristics |
-| :--- | :--- |
-| `default` | Calm blue accents (`#58A6FF`), crisp silver text, seamless native terminal background integration. |
-| `nord` | Arctic, pastel-blue tones (`#88C0D0`, `#81A1C1`) with subdued borders. |
-| `dracula` | Elegant purple (`#BD93F9`) and soft pink (`#FF79C6`) highlights. |
-| `matrix` | Classic hacker green (`#00FF66`) monospace aesthetic. |
-| `cyberpunk` | High-contrast neon cyan (`#00F0FF`) and bright yellow (`#FFE600`). |
 
 ---
 
