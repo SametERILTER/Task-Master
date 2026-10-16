@@ -1,7 +1,7 @@
 # TaskMaster (tm)
 
 <p align="center">
-  <img src="/assets/screenshot.png" alt="TaskMaster Screenshot" width="850" />
+  <img src="assets/screenshot1.png" alt="TaskMaster Screenshot" width="850" />
 </p>
 
 TaskMaster (`tm`) is a lightweight, cross-platform terminal task manager engineered with Go. It delivers real-time system resource tracking, non-blocking interactive command execution, deep process inspection, and customizable themes while maintaining minimal CPU and memory overhead.
