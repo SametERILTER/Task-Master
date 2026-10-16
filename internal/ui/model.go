@@ -21,6 +21,7 @@ const (
 	ViewModeMain ViewMode = iota
 	ViewModeHelp
 	ViewModeDetails
+	ViewModePorts
 )
 
 type MainModel struct {
@@ -37,12 +38,16 @@ type MainModel struct {
 	SortBy       string
 	Filter       string
 
-	Width       int
-	Height      int
-	CommandBar  CommandBar
-	Paused      bool
-	Mode        ViewMode
-	CurrDetails *metrics.ProcessDetails
+	Width        int
+	Height       int
+	CommandBar   CommandBar
+	Paused       bool
+	Mode         ViewMode
+	CurrDetails  *metrics.ProcessDetails
+	Ports        []metrics.PortInfo
+	SelectedPort int
+	PortScroll   int
+	PortFilter   uint32
 }
 
 // NewMainModel creates an initialized Bubbletea model.
@@ -79,9 +84,15 @@ func (m MainModel) tickCmd() tea.Cmd {
 }
 
 func (m MainModel) refreshMetricsCmd() tea.Cmd {
+	mode := m.Mode
+	sortBy := m.SortBy
+	filter := m.Filter
 	return func() tea.Msg {
 		stats, _ := metrics.GetSystemStats()
-		procs, _ := metrics.GetProcesses(m.SortBy, m.Filter)
+		var procs []metrics.ProcessInfo
+		if mode == ViewModeMain {
+			procs, _ = metrics.GetProcesses(sortBy, filter)
+		}
 		return MetricsUpdateMsg{
 			Stats:     stats,
 			Processes: procs,
@@ -121,17 +132,20 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case MetricsUpdateMsg:
 		m.Stats = msg.Stats
-		m.Stats.ProcessCount = len(msg.Processes)
 		m.CPUHistory.Push(msg.Stats.CPUPercent)
 		m.MemHistory.Push(msg.Stats.MemPercent)
-		m.Processes = msg.Processes
 
-		// Clamp selection
-		if m.SelectedIdx >= len(m.Processes) {
-			m.SelectedIdx = len(m.Processes) - 1
-		}
-		if m.SelectedIdx < 0 {
-			m.SelectedIdx = 0
+		if len(msg.Processes) > 0 || m.Mode == ViewModeMain {
+			m.Stats.ProcessCount = len(msg.Processes)
+			m.Processes = msg.Processes
+
+			// Clamp selection
+			if m.SelectedIdx >= len(m.Processes) {
+				m.SelectedIdx = len(m.Processes) - 1
+			}
+			if m.SelectedIdx < 0 {
+				m.SelectedIdx = 0
+			}
 		}
 
 	case tea.KeyMsg:
@@ -150,6 +164,108 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var cmd tea.Cmd
 				m.CommandBar.Input, cmd = m.CommandBar.Input.Update(msg)
 				return m, cmd
+			}
+		}
+
+		// If ViewModePorts is active, handle ports table navigation
+		if m.Mode == ViewModePorts {
+			switch msg.String() {
+			case "q", "esc", "tab", "p":
+				m.Mode = ViewModeMain
+				m.CommandBar.Status = "Returned to Tasks"
+				return m, tea.Batch(m.refreshMetricsCmd(), clearStatusCmd())
+			case ":":
+				return m, m.CommandBar.OpenCommand()
+			case "up", "k":
+				if m.SelectedPort > 0 {
+					m.SelectedPort--
+					if m.SelectedPort < m.PortScroll {
+						m.PortScroll = m.SelectedPort
+					}
+				}
+				return m, nil
+			case "down", "j":
+				if m.SelectedPort < len(m.Ports)-1 {
+					m.SelectedPort++
+					maxVisible := m.tableRowsCount()
+					if m.SelectedPort >= m.PortScroll+maxVisible {
+						m.PortScroll = m.SelectedPort - maxVisible + 1
+					}
+				}
+				return m, nil
+			case "pgup":
+				m.SelectedPort -= 10
+				if m.SelectedPort < 0 {
+					m.SelectedPort = 0
+				}
+				m.PortScroll = m.SelectedPort
+				return m, nil
+			case "pgdown":
+				m.SelectedPort += 10
+				if m.SelectedPort >= len(m.Ports) {
+					m.SelectedPort = len(m.Ports) - 1
+				}
+				maxVisible := m.tableRowsCount()
+				if m.SelectedPort >= m.PortScroll+maxVisible {
+					m.PortScroll = m.SelectedPort - maxVisible + 1
+				}
+				return m, nil
+			case "home", "g":
+				m.SelectedPort = 0
+				m.PortScroll = 0
+				return m, nil
+			case "end", "G":
+				if len(m.Ports) > 0 {
+					m.SelectedPort = len(m.Ports) - 1
+					maxVisible := m.tableRowsCount()
+					if len(m.Ports) > maxVisible {
+						m.PortScroll = len(m.Ports) - maxVisible
+					}
+				}
+				return m, nil
+			case "enter":
+				if len(m.Ports) > 0 && m.SelectedPort < len(m.Ports) {
+					det, err := metrics.GetProcessDetails(m.Ports[m.SelectedPort].PID)
+					if err == nil {
+						m.CurrDetails = det
+						m.Mode = ViewModeDetails
+						return m, nil
+					}
+				}
+				return m, nil
+			case "x", "K":
+				if len(m.Ports) > 0 && m.SelectedPort < len(m.Ports) {
+					target := m.Ports[m.SelectedPort]
+					err := metrics.KillProcess(target.PID)
+					if err != nil {
+						m.CommandBar.Status = fmt.Sprintf("ERROR: %v", err)
+					} else {
+						m.CommandBar.Status = fmt.Sprintf("Terminated %s (PID %d) on port %d", target.ProcessName, target.PID, target.Port)
+						ports, _ := metrics.GetOpenPorts(m.PortFilter)
+						m.Ports = ports
+						if m.SelectedPort >= len(m.Ports) && len(m.Ports) > 0 {
+							m.SelectedPort = len(m.Ports) - 1
+						}
+					}
+				}
+				return m, clearStatusCmd()
+			case "t":
+				themeNames := []string{"default", "nord", "dracula", "matrix", "cyberpunk"}
+				currIdx := 0
+				for i, name := range themeNames {
+					if name == m.CurrentTheme.Name {
+						currIdx = i
+						break
+					}
+				}
+				nextTheme := themeNames[(currIdx+1)%len(themeNames)]
+				m.applyTheme(nextTheme)
+				m.CommandBar.Status = fmt.Sprintf("Theme: %s", strings.ToUpper(nextTheme))
+				return m, clearStatusCmd()
+			case "ctrl+c":
+				return m, tea.Quit
+			default:
+				return m, nil
 			}
 		}
 
@@ -296,6 +412,24 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.applyTheme(nextTheme)
 			m.CommandBar.Status = fmt.Sprintf("Theme: %s", strings.ToUpper(nextTheme))
 
+		case "tab", "p": // Toggle Open Ports view
+			ports, err := metrics.GetOpenPorts(0)
+			if err != nil {
+				m.CommandBar.Status = fmt.Sprintf("Error: %v", err)
+				return m, clearStatusCmd()
+			}
+			if len(ports) == 0 {
+				m.CommandBar.Status = "No active listening ports found"
+				return m, clearStatusCmd()
+			}
+			m.Ports = ports
+			m.SelectedPort = 0
+			m.PortScroll = 0
+			m.PortFilter = 0
+			m.Mode = ViewModePorts
+			m.CommandBar.Status = "Viewing Open Ports (Press Tab or q to return)"
+			return m, clearStatusCmd()
+
 		case "x", "K": // Kill selected
 			if len(m.Processes) > 0 && m.SelectedIdx < len(m.Processes) {
 				target := m.Processes[m.SelectedIdx]
@@ -429,6 +563,44 @@ func (m *MainModel) handleCommand(mode InputMode, input string) tea.Cmd {
 		m.Mode = ViewModeDetails
 		return nil
 
+	case "task", "tasks", "proc", "processes":
+		m.Mode = ViewModeMain
+		m.CommandBar.Status = "Returned to Tasks"
+		return tea.Batch(m.refreshMetricsCmd(), clearStatusCmd())
+
+	case "port", "ports", "p":
+		var targetPort uint32
+		if len(parts) > 1 {
+			p, err := strconv.Atoi(parts[1])
+			if err != nil || p <= 0 || p > 65535 {
+				m.CommandBar.Status = "Error: Invalid port number (1-65535)"
+				return clearStatusCmd()
+			}
+			targetPort = uint32(p)
+		}
+
+		ports, err := metrics.GetOpenPorts(targetPort)
+		if err != nil {
+			m.CommandBar.Status = fmt.Sprintf("Error: %v", err)
+			return clearStatusCmd()
+		}
+
+		if len(ports) == 0 {
+			if targetPort > 0 {
+				m.CommandBar.Status = fmt.Sprintf("No process listening on port %d", targetPort)
+			} else {
+				m.CommandBar.Status = "No active listening ports found"
+			}
+			return clearStatusCmd()
+		}
+
+		m.Ports = ports
+		m.SelectedPort = 0
+		m.PortScroll = 0
+		m.PortFilter = targetPort
+		m.Mode = ViewModePorts
+		return nil
+
 	default:
 		m.CommandBar.Status = fmt.Sprintf("Unknown command: %s (Type :help for commands)", cmd)
 	}
@@ -488,7 +660,15 @@ func (m MainModel) View() string {
 	if m.Paused {
 		pausedInfo = m.styles.Danger.Render(" [PAUSED]")
 	}
-	sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, title, sortInfo, filterInfo, pausedInfo) + "\n")
+	modeInfo := ""
+	if m.Mode == ViewModePorts {
+		if m.PortFilter > 0 {
+			modeInfo = m.styles.Success.Render(fmt.Sprintf(" [PORT: %d]", m.PortFilter))
+		} else {
+			modeInfo = m.styles.Success.Render(" [PORTS VIEW]")
+		}
+	}
+	sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, title, modeInfo, sortInfo, filterInfo, pausedInfo) + "\n")
 
 	// 2. Metrics Header Cards
 	halfWidth := (m.Width / 2) - 3
@@ -525,6 +705,68 @@ func (m MainModel) View() string {
 	memCard := m.styles.HeaderCard.Width(halfWidth).Render(memContent)
 
 	sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, cpuCard, memCard) + "\n\n")
+
+	// If in Ports View, render Ports Table in place of Tasks Table!
+	if m.Mode == ViewModePorts {
+		portWidth := 8
+		protoWidth := 7
+		addrWidth := 18
+		pidWidth := 8
+		nameWidth := m.Width - portWidth - protoWidth - addrWidth - pidWidth - 8
+		if nameWidth < 15 {
+			nameWidth = 15
+		}
+
+		headerText := fmt.Sprintf(" %-*s %-*s %-*s %-*s %s",
+			portWidth, "PORT",
+			protoWidth, "PROTO",
+			addrWidth, "ADDRESS",
+			pidWidth, "PID",
+			"PROCESS NAME",
+		)
+		sb.WriteString(m.styles.TableHeader.Render(headerText) + "\n")
+
+		maxRows := m.tableRowsCount()
+		start := m.PortScroll
+		end := start + maxRows
+		if end > len(m.Ports) {
+			end = len(m.Ports)
+		}
+
+		if len(m.Ports) == 0 {
+			sb.WriteString(m.styles.Dim.Render("  No active listening ports found...\n"))
+		} else {
+			for i := start; i < end; i++ {
+				p := m.Ports[i]
+				name := p.ProcessName
+				if len(name) > nameWidth {
+					name = name[:nameWidth-1] + "…"
+				}
+
+				rowStr := fmt.Sprintf(" %-*d %-*s %-*s %-*d %s",
+					portWidth, p.Port,
+					protoWidth, p.Protocol,
+					addrWidth, p.LocalAddr,
+					pidWidth, p.PID,
+					name,
+				)
+
+				if i == m.SelectedPort {
+					sb.WriteString(m.styles.TableRowSel.Render(rowStr) + "\n")
+				} else {
+					sb.WriteString(m.styles.TableRow.Render(rowStr) + "\n")
+				}
+			}
+		}
+
+		renderedRows := end - start
+		for i := renderedRows; i < maxRows; i++ {
+			sb.WriteString("\n")
+		}
+
+		sb.WriteString(m.renderPortsBottomBar())
+		return sb.String()
+	}
 
 	// 3. Process Table Header
 	pidWidth := 8
@@ -604,6 +846,7 @@ func (m MainModel) renderHelpModal() string {
 		"  Enter            Inspect selected process details",
 		"",
 		m.styles.CardLabel.Render("KEY SHORTCUTS:"),
+		"  Tab / p          Toggle between Tasks and Open Ports",
 		"  /                Live search / filter processes",
 		"  :                Open command bar",
 		"  s                Cycle sort (CPU -> RAM -> PID -> Name)",
@@ -617,6 +860,8 @@ func (m MainModel) renderHelpModal() string {
 		"  :sort <field>    Sort by cpu, mem, name, or pid",
 		"  :theme <name>    Switch theme (default, nord, matrix, etc.)",
 		"  :filter <query>  Filter processes by name or PID",
+		"  :port [number]   Inspect open listening ports (in-place)",
+		"  :tasks           Return to process tasks view",
 		"  :pause / :resume Pause or resume live metrics refresh",
 		"  :q, :quit        Exit application",
 		"",
@@ -685,4 +930,20 @@ func (m MainModel) renderDetailsModal() string {
 		Render(content)
 
 	return lipgloss.Place(m.Width, m.Height, lipgloss.Center, lipgloss.Center, modal)
+}
+
+func (m MainModel) renderPortsBottomBar() string {
+	if m.CommandBar.Mode != ModeNormal {
+		promptStyle := m.styles.CommandPrompt
+		return promptStyle.Render(m.CommandBar.Input.Prompt) + m.styles.CommandInput.Render(m.CommandBar.Input.Value())
+	}
+
+	helpText := " [Tab / ESC / q] Back to Tasks  [↑/↓] Select  [x] Kill  [Enter] Details  [:] Command"
+	base := m.styles.StatusBar.Render(helpText)
+
+	if m.CommandBar.Status != "" {
+		return base + m.styles.Warning.Render("  » "+m.CommandBar.Status)
+	}
+
+	return base
 }

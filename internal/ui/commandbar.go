@@ -65,7 +65,7 @@ func (cb CommandBar) View(styles theme.Styles, width int) string {
 	}
 
 	// Always display the initial command bar
-	helpText := " [:] Command  [/] Search  [Enter] Details  [?] Help  [x] Kill  [s] Sort  [t] Theme  [q] Quit"
+	helpText := " [Tab] Ports  [:] Command  [/] Search  [Enter] Details  [?] Help  [x] Kill  [s] Sort  [t] Theme  [q] Quit"
 	base := styles.StatusBar.Render(helpText)
 
 	if cb.Status != "" {

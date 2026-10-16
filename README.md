@@ -75,13 +75,14 @@ CMDTaskManager/
 
 | Key | Description |
 | :--- | :--- |
+| `Tab` / `p` | Toggle between Process Tasks view and Open Ports view (in-place) |
 | `/` | Open live search input to filter processes by name or PID |
 | `:` | Open interactive command bar |
 | `s` | Cycle process sorting order (CPU -> RAM -> PID -> Name) |
 | `t` | Cycle color theme (Default -> Nord -> Dracula -> Matrix -> Cyberpunk) |
-| `x` / `K` | Terminate the currently selected process |
+| `x` / `K` | Terminate the currently selected process (or process on selected port) |
 | `?` / `h` | Open the full command and keybinding guide modal |
-| `q` / `ESC` | Clear active filter, dismiss modal, or exit application |
+| `q` / `ESC` | Return to Tasks from Ports/Help/Details, clear active filter, or exit |
 | `Ctrl+C` | Force quit immediately |
 
 ---
@@ -92,6 +93,8 @@ Press `:` at any point to activate the interactive prompt. The following command
 
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
+| `:port` | `[number]` | Switch process table in-place to listening ports (or filter by specific port). |
+| `:tasks` | None | Return to process tasks view from ports view. |
 | `:kill` | `<PID>` | Terminate process with the specified PID. If no PID is given, terminates the currently selected process. |
 | `:info` | `[PID]` | Open process inspection modal for the given PID or selected process. |
 | `:sort` | `cpu` \| `mem` \| `pid` \| `name` | Re-sort the process list by the specified attribute. |
@@ -160,6 +163,7 @@ TaskMaster provides command-line flags to customize TUI startup behavior or exec
 | Flag | Short | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--list <count>` | `-l` | None | Print snapshot table of top N processes to stdout and exit immediately (e.g. `tm --list 10`). |
+| `--port [number]` | `-p` | None | List open listening ports or check process on a specific port (e.g. `tm --port 3000`). |
 | `--sort <field>` | `-s` | `cpu` | Set process sorting metric: `cpu`, `mem` (or `memory`), `pid`, or `name`. |
 | `--filter <query>` | `-f` | None | Filter processes by name or PID substring upon launch (e.g. `tm --filter chrome`). |
 | `--theme <name>` | `-t` | `default` | Set active visual color theme (`default`, `nord`, `dracula`, `matrix`, `cyberpunk`). |
@@ -170,6 +174,7 @@ TaskMaster provides command-line flags to customize TUI startup behavior or exec
 | Subcommand | Arguments | Description |
 | :--- | :--- | :--- |
 | `tm list` | `[count]` / `-n <N>` | Print active processes snapshot to terminal and exit. Accepts positional count (e.g. `tm list 15`) or flag `-n, --top <N>`. |
+| `tm port` | `[number]` | List all open listening ports and owning processes, or inspect a specific port (e.g. `tm port 8080`). |
 | `tm kill` | `<PID>` | Terminate a process directly by its Process ID without launching the UI. |
 | `tm install` | None | Copy binary to local user programs and register in Windows User PATH. |
 
@@ -188,9 +193,14 @@ tm --list 10
 # Print top 5 processes sorted by Memory footprint
 tm -l 5 -s mem
 
-# Equivalent list subcommand usage
-tm list 10
-tm list -n 10 --sort mem
+# List all open listening ports and their owner processes
+tm port
+
+# Check which process is listening on port 3000
+tm port 3000
+
+# Equivalent port flag usage
+tm -p 8080
 
 # Terminate a process by PID directly from terminal
 tm kill 4920

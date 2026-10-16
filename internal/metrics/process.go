@@ -43,7 +43,6 @@ func GetProcesses(sortBy string, filter string) ([]ProcessInfo, error) {
 		}
 
 		cpuPct, _ := p.CPUPercent()
-		memPct, _ := p.MemoryPercent()
 		memInfo, _ := p.MemoryInfo()
 		var memBytes uint64
 		if memInfo != nil {
@@ -51,11 +50,10 @@ func GetProcesses(sortBy string, filter string) ([]ProcessInfo, error) {
 		}
 
 		result = append(result, ProcessInfo{
-			PID:           p.Pid,
-			Name:          name,
-			CPUPercent:    cpuPct,
-			MemoryPercent: memPct,
-			MemoryBytes:   memBytes,
+			PID:         p.Pid,
+			Name:        name,
+			CPUPercent:  cpuPct,
+			MemoryBytes: memBytes,
 		})
 	}
 
