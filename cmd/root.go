@@ -27,7 +27,7 @@ featuring rich graphics, interactive command line, and customizable color themes
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("port") {
 			var p uint32
-			if portFlag != "" {
+			if portFlag != "" && portFlag != "all" {
 				if n, err := strconv.Atoi(portFlag); err == nil && n > 0 {
 					p = uint32(n)
 				}
@@ -63,7 +63,10 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&sortFlag, "sort", "s", "cpu", "Sort processes by field (cpu, mem, pid, name)")
 	rootCmd.PersistentFlags().StringVarP(&filterFlag, "filter", "f", "", "Filter processes by name or PID")
 	rootCmd.PersistentFlags().StringVarP(&themeFlag, "theme", "t", "default", "Color theme (default, nord, dracula, matrix, cyberpunk)")
-	rootCmd.Flags().IntVarP(&listFlag, "list", "l", 0, "Print top N processes snapshot and exit (e.g. tm --list 10)")
+	rootCmd.Flags().IntVarP(&listFlag, "list", "l", 0, "Print top N processes snapshot and exit (e.g. tm --list or tm -l 10)")
 	rootCmd.Flags().StringVarP(&portFlag, "port", "p", "", "Show open listening ports (e.g. tm --port or tm -p 3000)")
 	rootCmd.Flags().BoolVarP(&treeFlag, "tree", "T", false, "Start in hierarchical process tree view mode")
+
+	rootCmd.Flags().Lookup("list").NoOptDefVal = "20"
+	rootCmd.Flags().Lookup("port").NoOptDefVal = "all"
 }
