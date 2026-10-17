@@ -31,14 +31,16 @@ func NewHistoryRingBuffer(capacity int) *HistoryRingBuffer {
 	}
 }
 
-// Push appends a value, dropping oldest if full.
+// Push appends a value, shifting in-place and dropping the oldest if full (zero heap allocations).
 func (rb *HistoryRingBuffer) Push(val float64) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
-	if len(rb.data) >= rb.capacity {
-		rb.data = rb.data[1:]
+	if len(rb.data) < rb.capacity {
+		rb.data = append(rb.data, val)
+	} else {
+		copy(rb.data, rb.data[1:])
+		rb.data[len(rb.data)-1] = val
 	}
-	rb.data = append(rb.data, val)
 }
 
 // Values returns a copy of the current values.
