@@ -156,6 +156,21 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.SelectedIdx < 0 {
 				m.SelectedIdx = 0
 			}
+
+			// Clamp scroll offset to prevent out-of-bounds view
+			maxVisible := m.tableRowsCount()
+			if m.SelectedIdx < m.ScrollOffset {
+				m.ScrollOffset = m.SelectedIdx
+			}
+			if m.SelectedIdx >= m.ScrollOffset+maxVisible {
+				m.ScrollOffset = m.SelectedIdx - maxVisible + 1
+			}
+			if m.ScrollOffset > len(m.Processes)-maxVisible {
+				m.ScrollOffset = len(m.Processes) - maxVisible
+			}
+			if m.ScrollOffset < 0 {
+				m.ScrollOffset = 0
+			}
 		}
 
 	case tea.KeyMsg:
@@ -321,6 +336,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.CommandBar.Status != "" || m.Filter != "" {
 				m.CommandBar.Status = ""
 				m.Filter = ""
+				m.SelectedIdx = 0
+				m.ScrollOffset = 0
 				return m, m.refreshMetricsCmd()
 			}
 			return m, tea.Quit
@@ -329,6 +346,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.CommandBar.Status != "" || m.Filter != "" {
 				m.CommandBar.Status = ""
 				m.Filter = ""
+				m.SelectedIdx = 0
+				m.ScrollOffset = 0
 				return m, m.refreshMetricsCmd()
 			}
 
@@ -481,6 +500,8 @@ func (m *MainModel) applyTheme(name string) {
 func (m *MainModel) handleCommand(mode InputMode, input string) tea.Cmd {
 	if mode == ModeSearch {
 		m.Filter = input
+		m.SelectedIdx = 0
+		m.ScrollOffset = 0
 		m.CommandBar.Status = fmt.Sprintf("Filter: '%s'", input)
 		return m.refreshMetricsCmd()
 	}
@@ -538,16 +559,20 @@ func (m *MainModel) handleCommand(mode InputMode, input string) tea.Cmd {
 
 	case "filter", "f":
 		if len(parts) > 1 {
-			m.Filter = parts[1]
+			m.Filter = strings.Join(parts[1:], " ")
 			m.CommandBar.Status = fmt.Sprintf("Filter: '%s'", m.Filter)
 		} else {
 			m.Filter = ""
 			m.CommandBar.Status = "Filter cleared"
 		}
+		m.SelectedIdx = 0
+		m.ScrollOffset = 0
 		return m.refreshMetricsCmd()
 
 	case "clear":
 		m.Filter = ""
+		m.SelectedIdx = 0
+		m.ScrollOffset = 0
 		m.CommandBar.Status = "Filter reset"
 		return m.refreshMetricsCmd()
 
@@ -768,13 +793,27 @@ func (m MainModel) View() string {
 		sb.WriteString(m.styles.TableHeader.Render(headerText) + "\n")
 
 		maxRows := m.tableRowsCount()
+		totalPorts := len(m.Ports)
 		start := m.PortScroll
+		if start >= totalPorts && totalPorts > 0 {
+			start = totalPorts - 1
+		}
+		if start < 0 {
+			start = 0
+		}
 		end := start + maxRows
-		if end > len(m.Ports) {
-			end = len(m.Ports)
+		if end > totalPorts {
+			end = totalPorts
+		}
+		if start > end {
+			start = 0
+			end = maxRows
+			if end > totalPorts {
+				end = totalPorts
+			}
 		}
 
-		if len(m.Ports) == 0 {
+		if totalPorts == 0 {
 			sb.WriteString(m.styles.Dim.Render("  No active listening ports found...\n"))
 		} else {
 			for i := start; i < end; i++ {
@@ -801,6 +840,12 @@ func (m MainModel) View() string {
 		}
 
 		renderedRows := end - start
+		if renderedRows < 0 {
+			renderedRows = 0
+		}
+		if totalPorts == 0 {
+			renderedRows = 1
+		}
 		for i := renderedRows; i < maxRows; i++ {
 			sb.WriteString("\n")
 		}
@@ -828,13 +873,27 @@ func (m MainModel) View() string {
 
 	// 4. Process Table Rows
 	maxRows := m.tableRowsCount()
+	totalProcs := len(m.Processes)
 	start := m.ScrollOffset
+	if start >= totalProcs && totalProcs > 0 {
+		start = totalProcs - 1
+	}
+	if start < 0 {
+		start = 0
+	}
 	end := start + maxRows
-	if end > len(m.Processes) {
-		end = len(m.Processes)
+	if end > totalProcs {
+		end = totalProcs
+	}
+	if start > end {
+		start = 0
+		end = maxRows
+		if end > totalProcs {
+			end = totalProcs
+		}
 	}
 
-	if len(m.Processes) == 0 {
+	if totalProcs == 0 {
 		sb.WriteString(m.styles.Dim.Render("  No matching processes found...\n"))
 	} else {
 		for i := start; i < end; i++ {
@@ -874,6 +933,12 @@ func (m MainModel) View() string {
 
 	// 5. Fill remaining vertical space
 	renderedRows := end - start
+	if renderedRows < 0 {
+		renderedRows = 0
+	}
+	if totalProcs == 0 {
+		renderedRows = 1
+	}
 	for i := renderedRows; i < maxRows; i++ {
 		sb.WriteString("\n")
 	}
