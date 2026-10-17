@@ -48,14 +48,18 @@ type MainModel struct {
 	SelectedPort int
 	PortScroll   int
 	PortFilter   uint32
+	IsTreeView   bool
 }
 
 // NewMainModel creates an initialized Bubbletea model.
-func NewMainModel(initialSort string, initialFilter string, initialTheme string) MainModel {
+func NewMainModel(initialSort string, initialFilter string, initialTheme string, initialTree bool) MainModel {
 	th := theme.GetTheme(initialTheme)
 	if initialSort == "" {
 		initialSort = "cpu"
 	}
+
+	cb := NewCommandBar()
+	cb.IsTree = initialTree
 
 	return MainModel{
 		CurrentTheme: th,
@@ -64,8 +68,9 @@ func NewMainModel(initialSort string, initialFilter string, initialTheme string)
 		MemHistory:   metrics.NewHistoryRingBuffer(60),
 		SortBy:       initialSort,
 		Filter:       initialFilter,
-		CommandBar:   NewCommandBar(),
+		CommandBar:   cb,
 		Mode:         ViewModeMain,
+		IsTreeView:   initialTree,
 	}
 }
 
@@ -87,11 +92,16 @@ func (m MainModel) refreshMetricsCmd() tea.Cmd {
 	mode := m.Mode
 	sortBy := m.SortBy
 	filter := m.Filter
+	isTree := m.IsTreeView
 	return func() tea.Msg {
 		stats, _ := metrics.GetSystemStats()
 		var procs []metrics.ProcessInfo
 		if mode == ViewModeMain {
-			procs, _ = metrics.GetProcesses(sortBy, filter)
+			if isTree {
+				procs, _ = metrics.GetProcessTree(sortBy, filter)
+			} else {
+				procs, _ = metrics.GetProcesses(sortBy, filter)
+			}
 		}
 		return MetricsUpdateMsg{
 			Stats:     stats,
@@ -170,9 +180,15 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If ViewModePorts is active, handle ports table navigation
 		if m.Mode == ViewModePorts {
 			switch msg.String() {
-			case "q", "esc", "tab", "p":
+			case "q", "esc", "tab":
 				m.Mode = ViewModeMain
 				m.CommandBar.Status = "Returned to Tasks"
+				return m, tea.Batch(m.refreshMetricsCmd(), clearStatusCmd())
+			case "p":
+				m.Mode = ViewModeMain
+				m.IsTreeView = true
+				m.CommandBar.IsTree = true
+				m.CommandBar.Status = "Tree View: ON (Press 'p' for flat list)"
 				return m, tea.Batch(m.refreshMetricsCmd(), clearStatusCmd())
 			case ":":
 				return m, m.CommandBar.OpenCommand()
@@ -412,7 +428,17 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.applyTheme(nextTheme)
 			m.CommandBar.Status = fmt.Sprintf("Theme: %s", strings.ToUpper(nextTheme))
 
-		case "tab", "p": // Toggle Open Ports view
+		case "p": // Toggle Process Tree view
+			m.IsTreeView = !m.IsTreeView
+			m.CommandBar.IsTree = m.IsTreeView
+			if m.IsTreeView {
+				m.CommandBar.Status = "Tree View: ON (Press 'p' for flat list)"
+			} else {
+				m.CommandBar.Status = "Tree View: OFF (Flat list)"
+			}
+			return m, tea.Batch(m.refreshMetricsCmd(), clearStatusCmd())
+
+		case "tab": // Toggle Open Ports view
 			ports, err := metrics.GetOpenPorts(0)
 			if err != nil {
 				m.CommandBar.Status = fmt.Sprintf("Error: %v", err)
@@ -563,9 +589,22 @@ func (m *MainModel) handleCommand(mode InputMode, input string) tea.Cmd {
 		m.Mode = ViewModeDetails
 		return nil
 
+	case "tree", "pstree":
+		m.Mode = ViewModeMain
+		m.IsTreeView = !m.IsTreeView
+		m.CommandBar.IsTree = m.IsTreeView
+		if m.IsTreeView {
+			m.CommandBar.Status = "Tree View: ON (Press 'p' for flat list)"
+		} else {
+			m.CommandBar.Status = "Tree View: OFF (Flat list)"
+		}
+		return tea.Batch(m.refreshMetricsCmd(), clearStatusCmd())
+
 	case "task", "tasks", "proc", "processes":
 		m.Mode = ViewModeMain
-		m.CommandBar.Status = "Returned to Tasks"
+		m.IsTreeView = false
+		m.CommandBar.IsTree = false
+		m.CommandBar.Status = "Returned to Flat Tasks"
 		return tea.Batch(m.refreshMetricsCmd(), clearStatusCmd())
 
 	case "port", "ports", "p":
@@ -667,6 +706,8 @@ func (m MainModel) View() string {
 		} else {
 			modeInfo = m.styles.Success.Render(" [PORTS VIEW]")
 		}
+	} else if m.IsTreeView {
+		modeInfo = m.styles.Success.Render(" [TREE VIEW]")
 	}
 	sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, title, modeInfo, sortInfo, filterInfo, pausedInfo) + "\n")
 
@@ -799,13 +840,26 @@ func (m MainModel) View() string {
 		for i := start; i < end; i++ {
 			p := m.Processes[i]
 			name := p.Name
-			if len(name) > nameWidth {
-				name = name[:nameWidth-1] + "…"
+			if m.IsTreeView && p.TreePrefix != "" {
+				name = p.TreePrefix + p.Name
+			}
+			visWidth := lipgloss.Width(name)
+			if visWidth > nameWidth {
+				runes := []rune(name)
+				for len(runes) > 0 && lipgloss.Width(string(runes)) > nameWidth-1 {
+					runes = runes[:len(runes)-1]
+				}
+				name = string(runes) + "…"
+				visWidth = lipgloss.Width(name)
+			}
+			paddedName := name
+			if visWidth < nameWidth {
+				paddedName += strings.Repeat(" ", nameWidth-visWidth)
 			}
 
-			rowStr := fmt.Sprintf(" %-*d %-*s %*.1f%% %*s ",
+			rowStr := fmt.Sprintf(" %-*d %s %*.1f%% %*s ",
 				pidWidth, p.PID,
-				nameWidth, name,
+				paddedName,
 				cpuWidth-1, p.CPUPercent,
 				memWidth, formatBytes(p.MemoryBytes),
 			)
@@ -846,7 +900,8 @@ func (m MainModel) renderHelpModal() string {
 		"  Enter            Inspect selected process details",
 		"",
 		m.styles.CardLabel.Render("KEY SHORTCUTS:"),
-		"  Tab / p          Toggle between Tasks and Open Ports",
+		"  p                Toggle process tree view (├── hierarchy)",
+		"  Tab              Toggle open listening ports view",
 		"  /                Live search / filter processes",
 		"  :                Open command bar",
 		"  s                Cycle sort (CPU -> RAM -> PID -> Name)",
@@ -855,13 +910,14 @@ func (m MainModel) renderHelpModal() string {
 		"  ? / h            Open this help guide",
 		"",
 		m.styles.CardLabel.Render("IN-APP COMMANDS (:):"),
+		"  :tree            Toggle hierarchical process tree view",
+		"  :tasks           Return to flat process list",
 		"  :kill <pid>      Terminate process by PID",
 		"  :info [pid]      View comprehensive process details",
 		"  :sort <field>    Sort by cpu, mem, name, or pid",
 		"  :theme <name>    Switch theme (default, nord, matrix, etc.)",
 		"  :filter <query>  Filter processes by name or PID",
 		"  :port [number]   Inspect open listening ports (in-place)",
-		"  :tasks           Return to process tasks view",
 		"  :pause / :resume Pause or resume live metrics refresh",
 		"  :q, :quit        Exit application",
 		"",

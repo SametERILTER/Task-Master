@@ -19,6 +19,7 @@ type CommandBar struct {
 	Input  textinput.Model
 	Mode   InputMode
 	Status string // temporary feedback message e.g. "Killed PID 1234"
+	IsTree bool
 }
 
 // NewCommandBar creates a configured CommandBar.
@@ -65,7 +66,10 @@ func (cb CommandBar) View(styles theme.Styles, width int) string {
 	}
 
 	// Always display the initial command bar
-	helpText := " [Tab] Ports  [:] Command  [/] Search  [Enter] Details  [?] Help  [x] Kill  [s] Sort  [t] Theme  [q] Quit"
+	helpText := " [p] Tree  [Tab] Ports  [:] Command  [/] Search  [Enter] Details  [?] Help  [x] Kill  [s] Sort  [q] Quit"
+	if cb.IsTree {
+		helpText = " [p] Flat List  [Tab] Ports  [:] Command  [/] Search  [Enter] Details  [?] Help  [x] Kill  [s] Sort  [q] Quit"
+	}
 	base := styles.StatusBar.Render(helpText)
 
 	if cb.Status != "" {

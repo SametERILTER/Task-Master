@@ -16,6 +16,7 @@ var (
 	themeFlag  string
 	listFlag   int
 	portFlag   string
+	treeFlag   bool
 )
 
 var rootCmd = &cobra.Command{
@@ -42,7 +43,7 @@ featuring rich graphics, interactive command line, and customizable color themes
 		}
 
 		p := tea.NewProgram(
-			ui.NewMainModel(sortFlag, filterFlag, themeFlag),
+			ui.NewMainModel(sortFlag, filterFlag, themeFlag, treeFlag),
 			tea.WithAltScreen(),
 		)
 		_, err := p.Run()
@@ -64,4 +65,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&themeFlag, "theme", "t", "default", "Color theme (default, nord, dracula, matrix, cyberpunk)")
 	rootCmd.Flags().IntVarP(&listFlag, "list", "l", 0, "Print top N processes snapshot and exit (e.g. tm --list 10)")
 	rootCmd.Flags().StringVarP(&portFlag, "port", "p", "", "Show open listening ports (e.g. tm --port or tm -p 3000)")
+	rootCmd.Flags().BoolVarP(&treeFlag, "tree", "T", false, "Start in hierarchical process tree view mode")
 }

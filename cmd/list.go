@@ -11,7 +11,13 @@ import (
 var topCount int
 
 func printProcessList(limit int) error {
-	procs, err := metrics.GetProcesses(sortFlag, filterFlag)
+	var procs []metrics.ProcessInfo
+	var err error
+	if treeFlag {
+		procs, err = metrics.GetProcessTree(sortFlag, filterFlag)
+	} else {
+		procs, err = metrics.GetProcesses(sortFlag, filterFlag)
+	}
 	if err != nil {
 		return err
 	}
@@ -20,16 +26,20 @@ func printProcessList(limit int) error {
 		limit = len(procs)
 	}
 
-	fmt.Printf("%-8s %-30s %10s %14s\n", "PID", "PROCESS NAME", "CPU %", "RAM (MB)")
-	fmt.Println("----------------------------------------------------------------")
+	fmt.Printf("%-8s %-38s %10s %14s\n", "PID", "PROCESS NAME", "CPU %", "RAM (MB)")
+	fmt.Println("----------------------------------------------------------------------")
 	for i := 0; i < limit; i++ {
 		p := procs[i]
 		name := p.Name
-		if len(name) > 30 {
-			name = name[:27] + "..."
+		if treeFlag && p.TreePrefix != "" {
+			name = p.TreePrefix + p.Name
+		}
+		runes := []rune(name)
+		if len(runes) > 38 {
+			name = string(runes[:35]) + "..."
 		}
 		ramMB := float64(p.MemoryBytes) / (1024 * 1024)
-		fmt.Printf("%-8d %-30s %9.1f%% %12.1f MB\n", p.PID, name, p.CPUPercent, ramMB)
+		fmt.Printf("%-8d %-38s %9.1f%% %12.1f MB\n", p.PID, name, p.CPUPercent, ramMB)
 	}
 	return nil
 }
@@ -50,6 +60,7 @@ var listCmd = &cobra.Command{
 
 func init() {
 	listCmd.Flags().IntVarP(&topCount, "top", "n", 20, "Number of top resource-consuming processes to display")
+	listCmd.Flags().BoolVarP(&treeFlag, "tree", "T", false, "Display process snapshot in hierarchical tree view")
 	rootCmd.AddCommand(listCmd)
 }
 

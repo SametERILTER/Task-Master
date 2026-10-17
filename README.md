@@ -75,7 +75,8 @@ CMDTaskManager/
 
 | Key | Description |
 | :--- | :--- |
-| `Tab` / `p` | Toggle between Process Tasks view and Open Ports view (in-place) |
+| `p` | Toggle Process Tree view (`├──` hierarchical parent-child relationships) |
+| `Tab` | Toggle between Process Tasks view and Open Ports view (in-place) |
 | `/` | Open live search input to filter processes by name or PID |
 | `:` | Open interactive command bar |
 | `s` | Cycle process sorting order (CPU -> RAM -> PID -> Name) |
@@ -93,8 +94,9 @@ Press `:` at any point to activate the interactive prompt. The following command
 
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
+| `:tree` | None | Toggle hierarchical process tree view on or off. |
+| `:tasks` | None | Return to flat process tasks view from tree or ports view. |
 | `:port` | `[number]` | Switch process table in-place to listening ports (or filter by specific port). |
-| `:tasks` | None | Return to process tasks view from ports view. |
 | `:kill` | `<PID>` | Terminate process with the specified PID. If no PID is given, terminates the currently selected process. |
 | `:info` | `[PID]` | Open process inspection modal for the given PID or selected process. |
 | `:sort` | `cpu` \| `mem` \| `pid` \| `name` | Re-sort the process list by the specified attribute. |
@@ -162,6 +164,7 @@ TaskMaster provides command-line flags to customize TUI startup behavior or exec
 
 | Flag | Short | Default | Description |
 | :--- | :--- | :--- | :--- |
+| `--tree` | `-T` | `false` | Start TaskMaster directly in hierarchical process tree view mode. |
 | `--list <count>` | `-l` | None | Print snapshot table of top N processes to stdout and exit immediately (e.g. `tm --list 10`). |
 | `--port [number]` | `-p` | None | List open listening ports or check process on a specific port (e.g. `tm --port 3000`). |
 | `--sort <field>` | `-s` | `cpu` | Set process sorting metric: `cpu`, `mem` (or `memory`), `pid`, or `name`. |
@@ -173,7 +176,7 @@ TaskMaster provides command-line flags to customize TUI startup behavior or exec
 
 | Subcommand | Arguments | Description |
 | :--- | :--- | :--- |
-| `tm list` | `[count]` / `-n <N>` | Print active processes snapshot to terminal and exit. Accepts positional count (e.g. `tm list 15`) or flag `-n, --top <N>`. |
+| `tm list` | `[count]` / `-n <N>` / `-T` | Print active processes snapshot to terminal and exit. Accepts positional count, `--top <N>`, and `--tree` / `-T` for hierarchy. |
 | `tm port` | `[number]` | List all open listening ports and owning processes, or inspect a specific port (e.g. `tm port 8080`). |
 | `tm kill` | `<PID>` | Terminate a process directly by its Process ID without launching the UI. |
 | `tm install` | None | Copy binary to local user programs and register in Windows User PATH. |
@@ -181,6 +184,9 @@ TaskMaster provides command-line flags to customize TUI startup behavior or exec
 ### Command-Line Usage Examples
 
 ```powershell
+# Launch interactive TUI in Process Tree view mode
+tm --tree
+
 # Launch interactive TUI sorted by Memory usage with Nord theme
 tm --sort mem --theme nord
 
@@ -189,6 +195,9 @@ tm --filter discord
 
 # Print top 10 processes to terminal and exit immediately
 tm --list 10
+
+# Print process tree snapshot directly to terminal
+tm list 25 --tree
 
 # Print top 5 processes sorted by Memory footprint
 tm -l 5 -s mem
