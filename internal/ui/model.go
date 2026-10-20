@@ -24,6 +24,12 @@ const (
 	ViewModePorts
 )
 
+const asciiLogo = `  ______           __   __  ___           __           
+ /_  __/___ ______/ /__/  |/  /___ ______/ /____  _____
+  / / / __ ` + "`" + `/ ___/ //_/ /|_/ / __ ` + "`" + `/ ___/ __/ _ \/ ___/
+ / / / /_/ (__  ) ,< / /  / / /_/ (__  ) /_/  __/ /    
+/_/  \__,_/____/_/|_/_/  /_/\__,_/____/\__/\___/_/     `
+
 type MainModel struct {
 	CurrentTheme theme.Theme
 	styles       theme.Styles
@@ -684,9 +690,16 @@ func (m *MainModel) handleCommand(mode InputMode, input string) tea.Cmd {
 	return nil
 }
 
+func (m MainModel) showAsciiLogo() bool {
+	return m.Width >= 60 && m.Height >= 22
+}
+
 func (m MainModel) tableRowsCount() int {
-	// Total height minus Header (~6 lines), Table header (2 lines), Footer (2 lines)
-	rows := m.Height - 10
+	offset := 10
+	if m.showAsciiLogo() {
+		offset = 14
+	}
+	rows := m.Height - offset
 	if rows < 5 {
 		return 5
 	}
@@ -722,7 +735,6 @@ func (m MainModel) View() string {
 	var sb strings.Builder
 
 	// 1. App Title Bar
-	title := m.styles.Title.Render("TaskMaster")
 	sortInfo := m.styles.Dim.Render(fmt.Sprintf(" Sort: [%s]", strings.ToUpper(m.SortBy)))
 	filterInfo := ""
 	if m.Filter != "" {
@@ -742,7 +754,18 @@ func (m MainModel) View() string {
 	} else if m.IsTreeView {
 		modeInfo = m.styles.Success.Render(" [TREE VIEW]")
 	}
-	sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, title, modeInfo, sortInfo, filterInfo, pausedInfo) + "\n")
+
+	if m.showAsciiLogo() {
+		title := m.styles.Title.Render(asciiLogo)
+		sb.WriteString(title + "\n")
+		badges := lipgloss.JoinHorizontal(lipgloss.Left, modeInfo, sortInfo, filterInfo, pausedInfo)
+		if strings.TrimSpace(badges) != "" {
+			sb.WriteString(badges + "\n")
+		}
+	} else {
+		title := m.styles.Title.Render("TaskMaster")
+		sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, title, modeInfo, sortInfo, filterInfo, pausedInfo) + "\n")
+	}
 
 	// 2. Metrics Header Cards
 	halfWidth := (m.Width / 2) - 3
