@@ -26,17 +26,15 @@ func GetOpenPorts(targetPort uint32) ([]PortInfo, error) {
 		return nil, fmt.Errorf("failed to retrieve network connections: %w", err)
 	}
 
-	// Cache process names by PID for fast lookup
-	procMap := make(map[int32]string)
-	procs, _ := process.Processes()
-	for _, p := range procs {
-		if name, err := p.Name(); err == nil && name != "" {
-			procMap[p.Pid] = name
-		}
+	// 1. Identify listening connections and unique PIDs needed
+	type listenEntry struct {
+		port uint32
+		addr string
+		pid  int32
 	}
-
+	var entries []listenEntry
+	neededPids := make(map[int32]struct{})
 	seen := make(map[string]bool)
-	var result []PortInfo
 
 	for _, c := range conns {
 		// Only consider listening ports
@@ -60,17 +58,50 @@ func GetOpenPorts(targetPort uint32) ([]PortInfo, error) {
 		}
 		seen[key] = true
 
-		procName := procMap[c.Pid]
+		entries = append(entries, listenEntry{
+			port: port,
+			addr: addr,
+			pid:  c.Pid,
+		})
+		if c.Pid > 0 && c.Pid != 4 {
+			neededPids[c.Pid] = struct{}{}
+		}
+	}
+
+	// 2. Resolve process names only for unique listening PIDs (O(K) lookup with early exit)
+	procMap := make(map[int32]string, len(neededPids))
+	if len(neededPids) > 0 {
+		procs, _ := process.Processes()
+		for _, p := range procs {
+			if _, needed := neededPids[p.Pid]; needed {
+				if name, err := p.Name(); err == nil && name != "" {
+					procMap[p.Pid] = name
+				}
+				if len(procMap) == len(neededPids) {
+					break
+				}
+			}
+		}
+	}
+
+	// 3. Assemble PortInfo result
+	result := make([]PortInfo, 0, len(entries))
+	for _, e := range entries {
+		procName := procMap[e.pid]
 		if procName == "" {
-			procName = "System / Unknown"
+			if e.pid == 4 || e.pid == 0 {
+				procName = "System"
+			} else {
+				procName = "System / Unknown"
+			}
 		}
 
 		result = append(result, PortInfo{
-			Port:        port,
+			Port:        e.port,
 			Protocol:    "TCP",
-			LocalAddr:   addr,
+			LocalAddr:   e.addr,
 			Status:      "LISTEN",
-			PID:         c.Pid,
+			PID:         e.pid,
 			ProcessName: procName,
 		})
 	}
