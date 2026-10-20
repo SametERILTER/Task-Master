@@ -233,8 +233,13 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "pgdown":
 				m.SelectedPort += 10
-				if m.SelectedPort >= len(m.Ports) {
+				if len(m.Ports) == 0 {
+					m.SelectedPort = 0
+				} else if m.SelectedPort >= len(m.Ports) {
 					m.SelectedPort = len(m.Ports) - 1
+				}
+				if m.SelectedPort < 0 {
+					m.SelectedPort = 0
 				}
 				maxVisible := m.tableRowsCount()
 				if m.SelectedPort >= m.PortScroll+maxVisible {
@@ -255,7 +260,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "enter":
-				if len(m.Ports) > 0 && m.SelectedPort < len(m.Ports) {
+				if len(m.Ports) > 0 && m.SelectedPort >= 0 && m.SelectedPort < len(m.Ports) {
 					det, err := metrics.GetProcessDetails(m.Ports[m.SelectedPort].PID)
 					if err == nil {
 						m.CurrDetails = det
@@ -265,7 +270,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "x", "K":
-				if len(m.Ports) > 0 && m.SelectedPort < len(m.Ports) {
+				if len(m.Ports) > 0 && m.SelectedPort >= 0 && m.SelectedPort < len(m.Ports) {
 					target := m.Ports[m.SelectedPort]
 					err := metrics.KillProcess(target.PID)
 					if err != nil {
@@ -274,7 +279,10 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.CommandBar.Status = fmt.Sprintf("Terminated %s (PID %d) on port %d", target.ProcessName, target.PID, target.Port)
 						ports, _ := metrics.GetOpenPorts(m.PortFilter)
 						m.Ports = ports
-						if m.SelectedPort >= len(m.Ports) && len(m.Ports) > 0 {
+						if len(m.Ports) == 0 {
+							m.SelectedPort = 0
+							m.PortScroll = 0
+						} else if m.SelectedPort >= len(m.Ports) {
 							m.SelectedPort = len(m.Ports) - 1
 						}
 					}
